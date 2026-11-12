@@ -4,11 +4,15 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <OutputPath>$(SolutionDir)\bin\NekoBot\$(Configuration)\$(TargetFramework)\plugins\</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\bot\NekoBot.csproj" />
-      <ProjectReference Include="..\..\clients\telegram\client\NekoBot.Telegram.csproj" />
+        <ProjectReference Include="..\..\bot\NekoBot.csproj" >
+            <Private>false</Private>
+        </ProjectReference>
+        <ProjectReference Include="..\..\clients\telegram\client\NekoBot.Telegram.csproj" />
     </ItemGroup>
 
 </Project>

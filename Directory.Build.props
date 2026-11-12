@@ -3,7 +3,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <OutputPath>$(SolutionDir)\bin\$(Configuration)</OutputPath>
-        <IntermediateOutputPath>$(SolutionDir)\obj\$(Configuration)</IntermediateOutputPath>
+        <OutputPath>$(SolutionDir)\bin\$(MSBuildProjectName)\$(Configuration)</OutputPath>
+        <IntermediateOutputPath>$(SolutionDir)\obj\$(MSBuildProjectName)\$(Configuration)</IntermediateOutputPath>
     </PropertyGroup>
 </Project>
