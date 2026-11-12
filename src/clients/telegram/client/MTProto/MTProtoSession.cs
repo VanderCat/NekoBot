@@ -13,11 +13,13 @@
 // limitations under the License.
 
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using NekoBot.Telegram.Crypto;
 using NekoBot.Telegram.MTProto.AuthTypes;
+using NekoBot.Telegram.MTProto.AuthTypes.Server;
 
 namespace NekoBot.Telegram.MTProto;
 
@@ -49,10 +51,10 @@ public class MTProtoSession {
 
     public void Connect() {
         var reqPq = InitiateDhExchange();
-        SendDhParam(reqPq);
+        var data = SendDhParam(reqPq);
     }
 
-    private void SendDhParam(resPQ resPq) {
+    private DhInnerData SendDhParam(resPQ resPq) {
         var pof = ProofOfWork(resPq.pq);
         if (!TelegramRsaKeys.TryFindKey(resPq.ServerPublicKeyFingerprints, out var selectedKey))
             throw new InvalidOperationException($"No matching server public key found. Suggested {string.Join(", ", resPq.ServerPublicKeyFingerprints.Select(arg => arg.ToString("x")))}");
@@ -73,7 +75,17 @@ public class MTProtoSession {
             var res = TlError.Deserialize(result.Span, out _);
             throw new Exception($"Telegram returned error {res.Code}: {res.Text}");
         }
-        throw new NotImplementedException();
+        var dhParams = DhParamsOk.Deserialize(result.Span, out _);
+        if (!CryptographicOperations.FixedTimeEquals(dhParams.Nonce.Span, resPq.Nonce))
+            throw new CryptographicException("Nonce mismatch in dhParamsOk! Data was tampered with.");
+        if (!CryptographicOperations.FixedTimeEquals(dhParams.ServerNonce.Span, resPq.ServerNonce))
+            throw new CryptographicException("Nonce mismatch in dhParamsOk! Data was tampered with.");
+        var data = DecryptServerDhInnerData(dhParams.EncryptedAnswer, newnonce, resPq.ServerNonce);
+        if (!CryptographicOperations.FixedTimeEquals(dhParams.ServerNonce.Span, data.ServerNonce.Span))
+            throw new CryptographicException("Nonce mismatch in dhInnerData! Data was tampered with.");
+        if (!CryptographicOperations.FixedTimeEquals(dhParams.Nonce.Span, data.Nonce.Span))
+            throw new CryptographicException("Nonce mismatch in dhInnerData! Data was tampered with.");
+        return data;
     }
 
     private ref struct resPQ {
@@ -132,6 +144,62 @@ public class MTProtoSession {
         }
 
         return reg_pq;
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Span<byte> Concat(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b, Span<byte> dst) {
+        Debug.Assert(dst.Length >= a.Length + b.Length);
+        a.CopyTo(dst);
+        b.CopyTo(dst[a.Length..]);
+        return dst;
+    }
+    
+    /// <summary>
+    /// Derives temporary AES-256 Key and 256 bit (32b) temporary IV
+    /// </summary>
+    public static (byte[] Key, byte[] Iv) DeriveTemporaryKeys(ReadOnlySpan<byte> newNonce, ReadOnlySpan<byte> serverNonce) {
+        if (newNonce.Length != 32) 
+            throw new ArgumentException("newNonce must be 32 bytes.", nameof(newNonce));
+        if (serverNonce.Length != 16) 
+            throw new ArgumentException("serverNonce must be 16 bytes.", nameof(serverNonce));
+        Span<byte> nonceBuffer = stackalloc byte[64]; // too much stack pressure?
+        Span<byte> hashBuffer = stackalloc byte[20];
+        var keyArray = new byte[32];
+        var ivArray = new byte[32];
+        Span<byte> key = keyArray;
+        Span<byte> iv = ivArray;
+        SHA1.HashData(Concat(newNonce, serverNonce, nonceBuffer)[..48], hashBuffer); // ns
+        hashBuffer.CopyTo(key);
+        SHA1.HashData(Concat(serverNonce, newNonce, nonceBuffer)[..48], hashBuffer); // sn
+        hashBuffer[..12].CopyTo(key[20..]);
+        hashBuffer[12..20].CopyTo(iv);
+        SHA1.HashData(Concat(newNonce, newNonce, nonceBuffer), hashBuffer); // nn
+        hashBuffer.CopyTo(iv[8..]);
+        newNonce[..4].CopyTo(iv[28..32]);
+
+        return (keyArray, ivArray);
+    }
+    
+    internal static DhInnerData DecryptServerDhInnerData(ReadOnlySpan<byte> encryptedAnswer, ReadOnlySpan<byte> newNonce, ReadOnlySpan<byte> serverNonce) {
+        var (tmpAesKey, tmpAesIv) = DeriveTemporaryKeys(newNonce, serverNonce);
+        
+        var answerWithHash = Aes256Ige.Decrypt(encryptedAnswer, tmpAesKey, tmpAesIv);
+
+        if (answerWithHash.Length < 20)
+            throw new CryptographicException("Decrypted payload is too short to contain a SHA1 hash.");
+        
+        var expectedSha1 = answerWithHash[..20];
+        var answerAndPadding = answerWithHash[20..];
+        
+        var innerData = DhInnerData.Deserialize(answerAndPadding, out var read);
+        
+        var actualAnswerBytes = answerAndPadding.AsSpan(0, read);
+
+        var actualSha1 = SHA1.HashData(actualAnswerBytes);
+        // if (!CryptographicOperations.FixedTimeEquals(expectedSha1, actualSha1)) //TODO: fancy function, should be used everywhere
+        //     throw new CryptographicException("SHA1 hash mismatch! Decryption failed or data was tampered with.");
+
+        return innerData;
     }
     
     /// <summary>

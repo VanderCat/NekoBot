@@ -20,11 +20,15 @@ public class DhParamsOk : ITlBoxedType<DhParamsOk> {
     public Memory<byte> ServerNonce;
     public TlString EncryptedAnswer;
     public int Serialize(Span<byte> destination) {
-        throw new NotImplementedException();
+        return new TlLightWriter(destination)
+            .WriteIdOf<DhParamsOk>()
+            .WriteBytes(Nonce)
+            .WriteBytes(ServerNonce)
+            .WriteString(EncryptedAnswer)
+            .Counter;
     }
-    public int GetSerializedLength() {
-        throw new NotImplementedException();
-    }
+
+    public int GetSerializedLength() => 4 + 16 + 16 + EncryptedAnswer.GetSerializedLength();
     
     public static DhParamsOk Deserialize(ReadOnlySpan<byte> data, out int bytesRead) {
         bytesRead = 0;

@@ -108,7 +108,7 @@ public static class Aes256Ige {
     }
     public static byte[] Decrypt(ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
         var plainText = new byte[cipherText.Length];
-        Decrypt(plainText, key, iv, plainText);
+        Decrypt(cipherText, key, iv, plainText);
         return plainText;
     }
 }

@@ -41,11 +41,18 @@ public class DhInnerData : ITlBoxedType<DhInnerData> {
     /// </summary>
     public int ServerTime;
     public int Serialize(Span<byte> destination) {
-        throw new NotImplementedException();
+        return new TlLightWriter(destination)
+            .WriteIdOf<DhInnerData>()
+            .WriteBytes(Nonce)
+            .WriteBytes(ServerNonce)
+            .WriteInt(G)
+            .WriteString(DhPrime)
+            .WriteString(Ga)
+            .WriteInt(ServerTime)
+            .Counter;
     }
-    public int GetSerializedLength() {
-        throw new NotImplementedException();
-    }
+
+    public int GetSerializedLength() => 4+16 + 16 + 4 + DhPrime.GetSerializedLength() + Ga.GetSerializedLength() + 4;
     public static DhInnerData Deserialize(ReadOnlySpan<byte> data, out int bytesRead) {
         bytesRead = 0;
         var reader = new TlLightReader(data, ref bytesRead);

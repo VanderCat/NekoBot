@@ -66,8 +66,8 @@ public class TlString : ITlType {
     /// <returns></returns>
     /// <exception cref="FormatException"></exception>
     public static int ReadLength(ReadOnlySpan<byte> bytes) {
-        Debug.Assert(bytes.Length == 1 && bytes[0] < 254);
-        Debug.Assert(bytes.Length > 4 && bytes[0] == 254);
+        // Debug.Assert(bytes.Length == 1 && bytes[0] < 254); // TODO: what the hell is that supposed to mean
+        // Debug.Assert(bytes.Length > 4 && bytes[0] == 254);
         var first = bytes[0];
         if (first <= 253) {
             return first;
@@ -82,10 +82,10 @@ public class TlString : ITlType {
         var len = ReadLength(buffer);
         ReadOnlySpan<byte> actualString;
         if (len <= 253) {
-            actualString = buffer[1..len];
+            actualString = buffer.Slice(1,len);
         }
         else {
-            actualString = buffer[4..len];
+            actualString = buffer.Slice(4, len);
         }
 
         return new TlString(actualString);

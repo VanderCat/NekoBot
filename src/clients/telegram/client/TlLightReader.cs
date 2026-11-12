@@ -58,8 +58,9 @@ public ref struct TlLightReader(ReadOnlySpan<byte> buffer, ref int counter) {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ThrowIfNotId(int expectedId) {
         var actualId = ConsumeInt();
-        throw new InvalidDataException(
-            $"Attempt to deserialize wrong type. Expected {expectedId:X}, Provided: {actualId:X}");
+        if (actualId != expectedId)
+            throw new InvalidDataException(
+                $"Attempt to deserialize wrong type. Expected {expectedId:X}, Provided: {actualId:X}");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
