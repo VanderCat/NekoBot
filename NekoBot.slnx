@@ -7,5 +7,6 @@
   <Folder Name="/Clients/Telegram/">
     <Project Path="src/clients/telegram/client/NekoBot.Telegram.csproj" />
     <Project Path="src/clients/telegram/bindgen/NekoBot.Telegram.Bindgen.csproj" />
+    <Project Path="src/clients/telegram/tests/NekoBot.Telegram.Tests.csproj" />
   </Folder>
 </Solution>

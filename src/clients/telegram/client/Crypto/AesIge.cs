@@ -12,47 +12,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System.Diagnostics.Contracts;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
+using System.Security.Cryptography;
 
 namespace NekoBot.Telegram.Crypto;
 
 public static class AesIge {
-    /// <summary>
-    /// AES-256-IGE hardware AES-NI instructions.
-    /// </summary>
-    public static byte[] Encrypt(ReadOnlySpan<byte> plainText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ValidateInputs(ReadOnlySpan<byte> plainText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
         if (plainText.Length % 16 != 0)
             throw new ArgumentException("Plaintext must be a multiple of 16 bytes.");
         if (iv.Length != 32)
             throw new ArgumentException("IV must be 32 bytes (16 bytes IV1 and 16 bytes IV2).");
+        if (key.Length != 32)
+            throw new ArgumentException("AES-256 key must be exactly 32 bytes (256 bits).");
+    }
+    /// <summary>
+    /// AES-256-IGE hardware AES-NI instructions.
+    /// </summary>
+    public static byte[] Encrypt(ReadOnlySpan<byte> plainText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
+        ValidateInputs(plainText, key, iv);
+        
+        using var aes = Aes.Create();
+        aes.Key = key.ToArray();
         
         var cipherText = new byte[plainText.Length];
 
         var cPrev = Vector128.Create(iv[..16]);
-        var pPrev = Vector128.Create(iv.Slice(16, 16));
-
-        // Use KeyExpansion to obtain round keys (or use Aes.Create() ECB mode if not expanding manually)
-        using var aes = System.Security.Cryptography.Aes.Create();
-        aes.Key = key.ToArray();
-        aes.Mode = System.Security.Cryptography.CipherMode.ECB;
-        aes.Padding = System.Security.Cryptography.PaddingMode.None;
-
-        using var encryptor = aes.CreateEncryptor();
-        var blockBuffer = new byte[16];
-        var ecbOut = new byte[16];
+        var pPrev = Vector128.Create(iv[16..32]);
+        
+        Span<byte> blockIn = stackalloc byte[16];
+        Span<byte> blockOut = stackalloc byte[16];
 
         for (var i = 0; i < plainText.Length; i += 16) {
             var pBlock = Vector128.Create(plainText.Slice(i, 16));
             
             // P_i XOR C_{i-1}
             var xorIn = pBlock ^ cPrev;
-            xorIn.CopyTo(blockBuffer);
+            xorIn.CopyTo(blockIn);
 
             // Single block AES-ECB (hardware-backed by runtime)
-            encryptor.TransformBlock(blockBuffer, 0, 16, ecbOut, 0);
+            aes.EncryptEcb(blockIn, blockOut, PaddingMode.None);
 
             // C_i = AES(P_i XOR C_{i-1}) XOR P_{i-1}
-            var aesRes = Vector128.Create(ecbOut);
+            var aesRes = Vector128.Create(blockOut);
             var cBlock = aesRes ^ pPrev;
 
             cBlock.CopyTo(cipherText.AsSpan(i, 16));
@@ -62,5 +67,39 @@ public static class AesIge {
         }
 
         return cipherText;
+    }
+    
+    public static byte[] Decrypt(ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
+        ValidateInputs(cipherText, key, iv);
+
+        using var aes = Aes.Create();
+        aes.Key = key.ToArray();
+
+        var plaintext = new byte[cipherText.Length];
+        var cPrev = Vector128.Create(iv[..16]);  // C_{-1}
+        var pPrev = Vector128.Create(iv[16..32]); // P_{-1}
+
+        Span<byte> blockIn = stackalloc byte[16];
+        Span<byte> blockOut = stackalloc byte[16];
+
+        for (var i = 0; i < cipherText.Length; i += 16) {
+            var cCurr = Vector128.Create(cipherText.Slice(i, 16)); // C_i
+            var xorIn = cCurr ^ pPrev; // C_i ^ P_{i-1}
+            xorIn.CopyTo(blockIn);
+            
+            // blockOut = AES_DEC(blockIn)
+            aes.DecryptEcb(blockIn, blockOut, PaddingMode.None);
+
+            // P_i = blockOut ^ C_{i-1}
+            var aesRes = Vector128.Create(blockOut);
+            var pCurr = aesRes ^ cPrev;
+
+            pCurr.CopyTo(plaintext.AsSpan(i, 16));
+
+            pPrev = pCurr;
+            cPrev = cCurr;
+        }
+
+        return plaintext;
     }
 }
