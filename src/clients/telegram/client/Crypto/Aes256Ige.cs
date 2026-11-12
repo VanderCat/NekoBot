@@ -19,26 +19,27 @@ using System.Security.Cryptography;
 
 namespace NekoBot.Telegram.Crypto;
 
-public static class AesIge {
+public static class Aes256Ige {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ValidateInputs(ReadOnlySpan<byte> plainText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
         if (plainText.Length % 16 != 0)
-            throw new ArgumentException("Plaintext must be a multiple of 16 bytes.");
+            throw new ArgumentException("Plaintext must be a multiple of 16 bytes.", nameof(plainText));
         if (iv.Length != 32)
-            throw new ArgumentException("IV must be 32 bytes (16 bytes IV1 and 16 bytes IV2).");
+            throw new ArgumentException("IV must be 32 bytes (16 bytes IV1 and 16 bytes IV2).", nameof(iv));
         if (key.Length != 32)
-            throw new ArgumentException("AES-256 key must be exactly 32 bytes (256 bits).");
+            throw new ArgumentException("AES-256 key must be exactly 32 bytes (256 bits).", nameof(key));
     }
+
     /// <summary>
     /// AES-256-IGE hardware AES-NI instructions.
     /// </summary>
-    public static byte[] Encrypt(ReadOnlySpan<byte> plainText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
+    public static void Encrypt(ReadOnlySpan<byte> plainText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv, Span<byte> cipherText) {
         ValidateInputs(plainText, key, iv);
+        if (cipherText.Length < plainText.Length)
+            throw new ArgumentException("Provided destination can't fit encrypted text.", nameof(cipherText));
         
         using var aes = Aes.Create();
         aes.Key = key.ToArray();
-        
-        var cipherText = new byte[plainText.Length];
 
         var cPrev = Vector128.Create(iv[..16]);
         var pPrev = Vector128.Create(iv[16..32]);
@@ -60,22 +61,27 @@ public static class AesIge {
             var aesRes = Vector128.Create(blockOut);
             var cBlock = aesRes ^ pPrev;
 
-            cBlock.CopyTo(cipherText.AsSpan(i, 16));
+            cBlock.CopyTo(cipherText.Slice(i, 16));
 
             pPrev = pBlock;
             cPrev = cBlock;
         }
+    }
 
+    public static byte[] Encrypt(ReadOnlySpan<byte> plainText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
+        var cipherText = new byte[plainText.Length];
+        Encrypt(plainText, key, iv, cipherText);
         return cipherText;
     }
     
-    public static byte[] Decrypt(ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
+    public static void Decrypt(ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv, Span<byte> plaintext) {
         ValidateInputs(cipherText, key, iv);
+        if (plaintext.Length < cipherText.Length)
+            throw new ArgumentException("Provided destination can't fit decrypted text.", nameof(plaintext));
 
         using var aes = Aes.Create();
         aes.Key = key.ToArray();
 
-        var plaintext = new byte[cipherText.Length];
         var cPrev = Vector128.Create(iv[..16]);  // C_{-1}
         var pPrev = Vector128.Create(iv[16..32]); // P_{-1}
 
@@ -94,12 +100,15 @@ public static class AesIge {
             var aesRes = Vector128.Create(blockOut);
             var pCurr = aesRes ^ cPrev;
 
-            pCurr.CopyTo(plaintext.AsSpan(i, 16));
+            pCurr.CopyTo(plaintext.Slice(i, 16));
 
             pPrev = pCurr;
             cPrev = cCurr;
         }
-
-        return plaintext;
+    }
+    public static byte[] Decrypt(ReadOnlySpan<byte> cipherText, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv) {
+        var plainText = new byte[cipherText.Length];
+        Decrypt(plainText, key, iv, plainText);
+        return plainText;
     }
 }

@@ -18,7 +18,7 @@ using TUnit.Assertions.Enums;
 
 namespace NekoBot.Telegram.Tests;
 
-public class AesIgeTests {
+public class Aes256IgeTests {
     [Test]
     [Arguments(16)]
     [Arguments(32)]
@@ -27,13 +27,14 @@ public class AesIgeTests {
         Span<byte> iv = stackalloc byte[32];
         Span<byte> key = stackalloc byte[32];
         var data = new byte[size];
+        var encryptionBuffer = new byte[size];
         RandomNumberGenerator.Fill(iv);
         RandomNumberGenerator.Fill(key);
         RandomNumberGenerator.Fill(data);
-        var encrypted = AesIge.Encrypt(data, key, iv);
-        var decrypted = AesIge.Decrypt(encrypted, key, iv);
-        await Assert.That(decrypted).IsNotEmpty();
-        await Assert.That(decrypted).Count().IsEqualTo(size);
-        await Assert.That(decrypted).IsEquivalentTo(data, CollectionOrdering.Matching);
+        Aes256Ige.Encrypt(data, key, iv, encryptionBuffer);
+        Aes256Ige.Decrypt(encryptionBuffer, key, iv, encryptionBuffer);
+        await Assert.That(encryptionBuffer).IsNotEmpty();
+        await Assert.That(encryptionBuffer).Count().IsEqualTo(size);
+        await Assert.That(encryptionBuffer).IsEquivalentTo(data, CollectionOrdering.Matching);
     }
 }

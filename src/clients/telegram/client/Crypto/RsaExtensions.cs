@@ -86,17 +86,17 @@ public static class RsaExtensions {
             hash.CopyTo(dataWithHashSpan[dataPadReversed.Length..]);
 
             // 5. aes_encrypted := AES256_IGE(data_with_hash, temp_key, 0)
-            var aesEncrypted = AesIge.Encrypt(dataWithHash, tempKey, zeroIv); //TODO: zero allocations inside loops
+            Aes256Ige.Encrypt(dataWithHashSpan, tempKey, zeroIv, dataWithHashSpan);
 
             // 6. temp_key_xor := temp_key XOR SHA256(aes_encrypted)
-            SHA256.HashData(aesEncrypted, hash);
+            SHA256.HashData(dataWithHashSpan, hash);
             
             for (int i = 0; i < 32; i++)
                 tempKeyXor[i] = (byte)(tempKey[i] ^ hash[i]);
 
             // 7. key_aes_encrypted := temp_key_xor + aes_encrypted -> 256 bytes
             tempKeyXor.CopyTo(keyAesEncrypted);
-            aesEncrypted.CopyTo(keyAesEncrypted.AsSpan(32));
+            dataWithHashSpan.CopyTo(keyAesEncrypted.AsSpan(32));
 
             // 8. Compare key_aes_encrypted with RSA modulus as unsigned big-endian integer
             var mValue = new BigInteger(keyAesEncrypted, isUnsigned: true, isBigEndian: true);
