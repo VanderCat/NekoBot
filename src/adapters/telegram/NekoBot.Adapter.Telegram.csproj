@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\bot\NekoBot.csproj" />
+      <ProjectReference Include="..\..\clients\telegram\client\NekoBot.Telegram.csproj" />
+    </ItemGroup>
+
+</Project>

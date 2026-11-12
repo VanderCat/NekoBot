@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="src/bot/NekoBot.csproj" />
+  <Folder Name="/Adapters/">
+    <Project Path="src/adapters/telegram/NekoBot.Adapter.Telegram.csproj" />
+  </Folder>
+  <Folder Name="/Clients/" />
+  <Folder Name="/Clients/Telegram/">
+    <Project Path="src/clients/telegram/client/NekoBot.Telegram.csproj" />
+    <Project Path="src/clients/telegram/bindgen/NekoBot.Telegram.Bindgen.csproj" />
+  </Folder>
+</Solution>
